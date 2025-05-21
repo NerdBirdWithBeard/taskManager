@@ -187,3 +187,15 @@ app.use((err, req, res, next) => {
 app.listen(port, () => {
     console.log(`Example app listening on port ${port}`);
 })
+
+process.on('SIGINT', async () => {
+    console.log('SIGINT received: closing Prisma client...');
+    await prisma.$disconnect();
+    process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+    console.log('SIGTERM received: closing Prisma client...');
+    await prisma.$disconnect();
+    process.exit(0);
+});
