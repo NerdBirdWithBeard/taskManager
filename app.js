@@ -1,25 +1,10 @@
 const { PrismaClient, Prisma } = require('@prisma/client');
 const express = require('express');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const app = express();
-const port = 3000;
+const port = process.env.PORT;
 const prisma = new PrismaClient();
-
-function convertDateFields(obj) {
-    const result = {};
-
-    for (const [key, value] of Object.entries(obj)) {
-        if (typeof value === 'string') {
-            const parsedDate = new Date(value);
-            if (!isNaN(parsedDate)) {
-                result[key] = parsedDate;
-                continue;
-            }
-        }
-        result[key] = value;
-    }
-
-    return result;
-}
 
 function normalizeResult(result) {
     if (
@@ -44,8 +29,17 @@ function sendNormalized(res, result, successMessage, fallbackStatus = 400, fallb
     }
 }
 
+function generateToken(userId) {
+  return jwt.sign({userId}, process.env.JWT_SECRET, {expiresIn: '1d'});
+}
+
 async function createUser(data) {
     const user = await prisma.user.create({data: data});
+    return user;
+}
+
+async function getUser(filter) {
+    const user = await prisma.user.findUnique({where: filter});
     return user;
 }
 
@@ -86,6 +80,24 @@ const asyncHandler = fn => (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch(next);
 };
 
+const auth = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({message: 'Unauthorized'})
+    }
+
+    const token = authHeader.split(' ')[1];
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        req.user = decoded;
+        next();
+    } catch {
+        return res.status(401).json({message: 'Invalid token'})
+    }
+};
+
 app.use(express.json());
 
 app.use((req, res, next) => {
@@ -93,37 +105,56 @@ app.use((req, res, next) => {
     next();
 });
 
-app.post('/api/createUser', asyncHandler(async (req, res) => {
-    const data = req.body;
-    sendNormalized(res, await createUser(data), 'New user successfully created');
+app.post('/api/auth/register', asyncHandler(async (req, res) => {
+        const data = req.body;
+            data.password = await bcrypt.hash(data.password, 10);
+            let user = await createUser(data);
+            const token = generateToken(user.id);
+            sendNormalized(res, {accessToken: token}, 'New user successfully created');
+    }));
+
+app.post('/api/auth/login', asyncHandler(async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+        return res.status(400).json({error: 'Email and password are required'});
+    }
+    console.log(email, password);
+    user = await getUser({email: email});
+    if (!user) {
+        return res.status(401).json({error: 'Invalid credentials'});
+    }
+    const isMatch = await bcrypt.compare(password, user.password);
+    let result = isMatch
+        ? {accessToken: generateToken(user.id)}
+        : null;
+    sendNormalized(res, result, 'Authorized', 401, 'Unauthorized');
 }));
 
-app.post('/api/createProject', asyncHandler(async (req, res) => {
+app.post('/api/createProject', auth, asyncHandler(async (req, res) => {
     const data = req.body;
+    data.ownerId = req.user.userId;
     sendNormalized(res, await createProject(data), 'New project successfully created');
 }));
 
-app.get('/api/tasks', asyncHandler(async (req, res) => {
+app.get('/api/tasks', auth, asyncHandler(async (req, res) => {
     const filter = req.query;
-        let result;
-        if (Object.keys(filter).length === 0) {
-            result = await getTasks();
-            } else {
-            result = await getTasks(filter);
-        }
-        sendNormalized(res, result, 'Success', 404, 'No tasks found found');
+    filter.userId = req.user.userId;
+    sendNormalized(res, await getTasks(filter), 'Success', 404, 'No tasks found found');
 }));
 
 app.route('/api/task')
-    .get(asyncHandler(async (req, res) => {
+    .get(auth ,asyncHandler(async (req, res) => {
         const filter = req.query;
+        filter.userId = req.user.userId;
         sendNormalized(res, await getTask(filter), 'Success', 404, 'Task not found');
 
     }))
-    .post(asyncHandler(async (req, res) => {
+    .post(auth, asyncHandler(async (req, res) => {
         const { id } = req.query;
         const filter = req.query;
-        const data = convertDateFields(req.body);
+        const data = req.body;
+        data.dueDate = new Date(data.dueDate);
+        data.userId = req.user.userId;
         if (id) {
             sendNormalized(res,
                 await updateTask(filter, data),
@@ -136,9 +167,10 @@ app.route('/api/task')
             sendNormalized(res, await createTask(data), 'New task successfully created');
         }
     }))
-    .delete(asyncHandler(async (req, res) => {
+    .delete(auth, asyncHandler(async (req, res) => {
         const { id } = req.query;
         const filter = req.query;
+        filter.userId = req.user.userId;
         if (id) {
             sendNormalized(res, await deleteTask(filter), 'Task successfully deleted',
                 404,
@@ -147,15 +179,7 @@ app.route('/api/task')
         } else {
             res.status(400).json({message: 'Nothing to delete'})
         }
-    }))
-
-app.get('/api/status', (req, res) => {
-    res.send('This is task status')
-})
-
-app.get('/api/hello', (req, res) => {
-    res.send('Hello, my friend!')
-})
+    }));
 
 app.use((err, req, res, next) => {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
@@ -164,9 +188,6 @@ app.use((err, req, res, next) => {
                     error: `Record with such field value "${err.meta?.target}" already exists`,
                 });
             }
-        }
-
-    if (err instanceof Prisma.PrismaClientKnownRequestError) {
             if (err.code === 'P2025') {
                 return res.status(404).json({
                     error: 'Record not found. Nothing was deleted or updated.',
