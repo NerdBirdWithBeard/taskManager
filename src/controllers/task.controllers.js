@@ -1,6 +1,6 @@
+const taskService = require('../services/task.services');
 const asyncHandler = require('../utils/asyncHandler');
 const sendNormalized = require('../utils/sendNormalized');
-const taskService = require('../services/task.services');
 
 
 exports.getTasks = asyncHandler(async (req, res) => {

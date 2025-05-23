@@ -1,6 +1,6 @@
-const asyncHandler = require('../utils/asyncHandler');
-const sendNormalized = require('../utils/sendNormalized');
 const projectService = require('../services/project.service');
+const projectService = require('../services/project.service');
+const sendNormalized = require('../utils/sendNormalized');
 
 exports.createProject = asyncHandler(async (req, res) => {
     const data = req.body;

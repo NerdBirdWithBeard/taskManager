@@ -1,8 +1,8 @@
 const bcrypt = require('bcrypt');
+const authService = require('../services/auth.service');
 const asyncHandler = require('../utils/asyncHandler');
 const generateToken = require('../utils/generateToken');
 const sendNormalized = require('../utils/sendNormalized');
-const authService = require('../services/auth.service');
 
 exports.createUser = asyncHandler(async (req, res) => {
     const data = req.body;
@@ -12,8 +12,8 @@ exports.createUser = asyncHandler(async (req, res) => {
         sendNormalized(res, {accessToken: token}, 'New user successfully created')
 });
 
-exports.getUser = asyncHandler(async (req, res) => { //routers
-    const { email, password } = req.body; // controllers
+exports.getUser = asyncHandler(async (req, res) => {
+    const { email, password } = req.body;
     if (!email || !password) {
         return res.status(400).json({error: 'Email and password are required'});
     }

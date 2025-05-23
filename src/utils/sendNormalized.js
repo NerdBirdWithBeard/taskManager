@@ -1,5 +1,4 @@
 function sendNormalized (res, result, successMessage, fallbackStatus = 400, fallbackMessage = 'Invalid data') {
-    // result = normalizeResult(result);
     if (
         result === null ||
         (typeof result === 'object' && (
@@ -14,6 +13,6 @@ function sendNormalized (res, result, successMessage, fallbackStatus = 400, fall
     } else {
         res.status(fallbackStatus).json({ error: fallbackMessage });
     }
-};
+}
 
 module.exports = sendNormalized;
