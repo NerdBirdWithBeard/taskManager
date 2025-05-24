@@ -1,3 +1,4 @@
+const { validationResult } = require('express-validator');
 const taskService = require('../services/task.services');
 const asyncHandler = require('../utils/asyncHandler');
 const sendNormalized = require('../utils/sendNormalized');
@@ -17,6 +18,10 @@ exports.getTask = asyncHandler(async (req, res) => {
 });
     
 exports.createTask = asyncHandler(async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(422).json({errors: errors.array()})
+    }
     const data = req.body;
     data.dueDate = new Date(data.dueDate);
     data.userId = req.user.userId;
@@ -24,6 +29,10 @@ exports.createTask = asyncHandler(async (req, res) => {
 });
 
 exports.updateTask = asyncHandler(async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(422).json({errors: errors.array()})
+    }
     const filter = req.query;
     const data = req.body;
     data.dueDate = new Date(data.dueDate);
